@@ -26,6 +26,19 @@ class MailCraftClient
     }
 
     /**
+     * Create a fluent email builder.
+     *
+     *   $mail->create('welcome')
+     *     ->to('john@example.com')
+     *     ->data(['name' => 'John'])
+     *     ->send();
+     */
+    public function create(string $type): MailBuilder
+    {
+        return new MailBuilder($this, $type);
+    }
+
+    /**
      * Send a transactional email.
      *
      * @param array{

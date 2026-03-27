@@ -7,6 +7,7 @@ use MailCraft\MailCraftClient;
 
 /**
  * @method static array send(array $options)
+ * @method static \MailCraft\MailBuilder create(string $type)
  *
  * @see MailCraftClient
  */
