@@ -1,6 +1,6 @@
 # mailcraft-laravel
 
-Official Laravel SDK for [MailCraft](https://github.com/mailcraft-cloud/mailcraft-laravel) — transactional email with AI-generated content.
+Official Laravel SDK for [MailCraft](https://github.com/mailcraft-cloud/mailcraft) — open source transactional email with AI-generated content.
 
 ## Installation
 
@@ -8,7 +8,7 @@ Official Laravel SDK for [MailCraft](https://github.com/mailcraft-cloud/mailcraf
 composer require mailcraft/mailcraft-laravel
 ```
 
-Laravel auto-discovers the service provider and facade via package discovery.
+Laravel auto-discovers the service provider and facade.
 
 ## Configuration
 
@@ -24,7 +24,7 @@ Add your API key to `.env`:
 MAILCRAFT_API_KEY=mc_your_api_key_here
 ```
 
-If you are self-hosting MailCraft, also set:
+If self-hosting:
 
 ```env
 MAILCRAFT_BASE_URL=https://your-mailcraft-instance.com
@@ -32,23 +32,32 @@ MAILCRAFT_BASE_URL=https://your-mailcraft-instance.com
 
 ## Usage
 
-### With the Facade
+### Fluent API (recommended)
 
 ```php
 use MailCraft\Facades\MailCraft;
 
+MailCraft::create('welcome')
+    ->to('john@example.com')
+    ->data(['name' => 'John', 'plan' => 'Pro'])
+    ->prompt('Mention dedicated support')
+    ->action('Get Started', 'https://app.example.com')
+    ->action('View Docs', 'https://docs.example.com', 'secondary')
+    ->send();
+```
+
+### Classic API
+
+```php
 $result = MailCraft::send([
     'type'    => 'welcome',
     'to'      => 'john@example.com',
     'data'    => ['name' => 'John', 'plan' => 'Pro'],
-    'prompt'  => 'Mention dedicated support and onboarding.',
+    'prompt'  => 'Mention dedicated support',
     'actions' => [
-        ['label' => 'Get Started', 'url' => 'https://app.example.com/onboard'],
+        ['label' => 'Get Started', 'url' => 'https://app.example.com'],
     ],
 ]);
-
-// $result['id']     — e.g. "log_abc123"
-// $result['status'] — "sent" | "failed" | "fallback"
 ```
 
 ### With Dependency Injection
@@ -58,15 +67,14 @@ use MailCraft\MailCraftClient;
 
 class WelcomeController extends Controller
 {
-    public function __construct(private MailCraftClient $mailcraft) {}
+    public function __construct(private MailCraftClient $mail) {}
 
     public function send(): void
     {
-        $this->mailcraft->send([
-            'type' => 'welcome',
-            'to'   => 'john@example.com',
-            'data' => ['name' => 'John'],
-        ]);
+        $this->mail->create('welcome')
+            ->to('john@example.com')
+            ->data(['name' => 'John'])
+            ->send();
     }
 }
 ```
@@ -76,42 +84,40 @@ class WelcomeController extends Controller
 ```php
 use MailCraft\MailCraftClient;
 
-$client = new MailCraftClient('mc_your_api_key_here');
+$client = new MailCraftClient('mc_your_api_key');
 
-$result = $client->send([
-    'type' => 'welcome',
-    'to'   => 'john@example.com',
-    'data' => ['name' => 'John', 'plan' => 'Pro'],
-]);
+$client->create('welcome')
+    ->to('john@example.com')
+    ->data(['name' => 'John'])
+    ->send();
 ```
 
-## Options
+## Fluent Builder Methods
+
+| Method | Description |
+|--------|-------------|
+| `->to($email)` | Set recipient email |
+| `->data($array)` | Set dynamic template data |
+| `->prompt($string)` | Steer AI content generation |
+| `->action($label, $url, $style?)` | Add a CTA button (call multiple times) |
+| `->actions($array)` | Set all actions at once |
+| `->send()` | Send the email, returns `['id' => ..., 'status' => ...]` |
+
+## Options (Classic API)
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `type` | `string` | Yes | Email template type (e.g. `welcome`, `password-reset`, `invoice`) |
+| `type` | `string` | Yes | Email type: `'welcome'`, `'invoice'`, `'password-reset'`, etc. |
 | `to` | `string` | Yes | Recipient email address |
-| `data` | `array` | No | Template variables merged into the email content |
-| `prompt` | `string` | No | Natural-language instruction for the AI (e.g. "mention the free trial") |
-| `actions` | `array` | No | Call-to-action buttons (see below) |
-
-### `actions` format
-
-Each action is an associative array:
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `label` | `string` | Yes | Button text |
-| `url` | `string` | Yes | Button destination URL |
-| `style` | `string` | No | Visual style hint (e.g. `primary`, `secondary`) |
+| `data` | `array` | No | Template variables |
+| `prompt` | `string` | No | AI content instructions |
+| `actions` | `array` | No | CTA buttons: `[['label' => ..., 'url' => ..., 'style' => ...]]` |
 
 ## Response
 
 ```php
-[
-    'id'     => 'log_abc123',   // Unique send log ID
-    'status' => 'sent',         // "sent" | "failed" | "fallback"
-]
+['id' => 'log_abc123', 'status' => 'sent']
+// status: "sent" | "failed" | "fallback"
 ```
 
 ## Error Handling
@@ -121,52 +127,28 @@ use MailCraft\Facades\MailCraft;
 use MailCraft\MailCraftException;
 
 try {
-    $result = MailCraft::send([
-        'type' => 'welcome',
-        'to'   => 'john@example.com',
-    ]);
+    MailCraft::create('welcome')
+        ->to('john@example.com')
+        ->send();
 } catch (MailCraftException $e) {
-    // HTTP status code (e.g. 401, 422, 500)
-    $statusCode = $e->getStatusCode();
-
-    // Parsed response body from the API (or null)
-    $body = $e->getBody();
-
-    // Human-readable message
-    $message = $e->getMessage();
-
-    logger()->error('MailCraft send failed', [
-        'status'  => $statusCode,
-        'message' => $message,
-        'body'    => $body,
-    ]);
-} catch (\InvalidArgumentException $e) {
-    // Missing required fields (type or to)
-    logger()->error($e->getMessage());
+    $e->getStatusCode(); // 401, 400, 502, etc.
+    $e->getMessage();    // "Invalid API key"
+    $e->getBody();       // Parsed response body
 }
 ```
 
-## Self-Hosted Configuration
-
-If you run MailCraft on your own infrastructure, override the base URL:
+## Self-Hosted
 
 ```env
 MAILCRAFT_BASE_URL=https://mail.internal.example.com
 ```
 
-Or pass it directly when instantiating the client:
+Or pass directly:
 
 ```php
 $client = new MailCraftClient('mc_your_key', 'https://mail.internal.example.com');
 ```
 
-## Testing
-
-```bash
-composer install
-vendor/bin/phpunit
-```
-
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT
